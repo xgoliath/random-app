@@ -1,0 +1,1348 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FaceAttend — Smart Attendance System</title>
+<script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #070b14;
+    --surface: #0d1421;
+    --surface2: #121a2e;
+    --border: #1e2d4a;
+    --accent: #00e5ff;
+    --accent2: #7c3aed;
+    --success: #00e676;
+    --warning: #ffb300;
+    --danger: #ff4d6d;
+    --text: #e8f0fe;
+    --text-dim: #6b84a8;
+    --glow: 0 0 30px rgba(0,229,255,0.15);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Syne', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    overflow-x: hidden;
+    background-image:
+      radial-gradient(ellipse 80% 50% at 50% -20%, rgba(0,229,255,0.06) 0%, transparent 70%),
+      radial-gradient(ellipse 40% 30% at 80% 80%, rgba(124,58,237,0.05) 0%, transparent 60%);
+  }
+
+  /* GRID NOISE OVERLAY */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(0,229,255,0.02) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,229,255,0.02) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  header {
+    position: relative;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 20px 40px;
+    border-bottom: 1px solid var(--border);
+    background: rgba(7,11,20,0.8);
+    backdrop-filter: blur(12px);
+  }
+
+  .logo {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 1.4rem;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+  }
+
+  .logo-icon {
+    width: 36px; height: 36px;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1rem;
+  }
+
+  .logo span { color: var(--accent); }
+
+  #status-pill {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.72rem;
+    padding: 6px 14px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text-dim);
+    display: flex; align-items: center; gap: 8px;
+    transition: all 0.3s;
+  }
+
+  #status-pill.ready { border-color: var(--success); color: var(--success); }
+  #status-pill.loading { border-color: var(--warning); color: var(--warning); }
+  #status-pill.error { border-color: var(--danger); color: var(--danger); }
+
+  .dot {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: currentColor;
+    animation: pulse 1.5s ease-in-out infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+  }
+
+  /* TABS */
+  .tabs {
+    position: relative;
+    z-index: 10;
+    display: flex;
+    gap: 4px;
+    padding: 20px 40px 0;
+  }
+
+  .tab {
+    font-family: 'Syne', sans-serif;
+    font-weight: 600;
+    font-size: 0.85rem;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    padding: 10px 24px;
+    border: 1px solid var(--border);
+    border-bottom: none;
+    border-radius: 10px 10px 0 0;
+    background: var(--surface);
+    color: var(--text-dim);
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .tab:hover { color: var(--text); border-color: var(--accent); }
+  .tab.active { background: var(--surface2); color: var(--accent); border-color: var(--accent); }
+
+  /* MAIN CONTENT */
+  main {
+    position: relative;
+    z-index: 10;
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 40px;
+  }
+
+  .panel { display: none; }
+  .panel.active { display: block; }
+
+  /* CARDS */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 28px;
+    margin-bottom: 20px;
+    transition: border-color 0.3s;
+  }
+
+  .card:hover { border-color: rgba(0,229,255,0.2); }
+
+  .card-title {
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    margin-bottom: 16px;
+    display: flex; align-items: center; gap: 8px;
+  }
+
+  .card-title::before {
+    content: '';
+    display: inline-block;
+    width: 14px; height: 2px;
+    background: var(--accent);
+  }
+
+  /* WEBCAM AREA */
+  .cam-wrap {
+    position: relative;
+    width: 100%;
+    max-width: 520px;
+    margin: 0 auto;
+    border-radius: 14px;
+    overflow: hidden;
+    background: #000;
+    border: 2px solid var(--border);
+    box-shadow: var(--glow);
+    aspect-ratio: 4/3;
+  }
+
+  #video {
+    width: 100%; height: 100%;
+    object-fit: cover;
+    display: block;
+    transform: scaleX(-1);
+  }
+
+  #overlay {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    transform: scaleX(-1);
+  }
+
+  .cam-corner {
+    position: absolute;
+    width: 24px; height: 24px;
+    border-color: var(--accent);
+    border-style: solid;
+    opacity: 0.7;
+  }
+  .cam-corner.tl { top: 10px; left: 10px; border-width: 2px 0 0 2px; }
+  .cam-corner.tr { top: 10px; right: 10px; border-width: 2px 2px 0 0; }
+  .cam-corner.bl { bottom: 10px; left: 10px; border-width: 0 0 2px 2px; }
+  .cam-corner.br { bottom: 10px; right: 10px; border-width: 0 2px 2px 0; }
+
+  #cam-msg {
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    background: linear-gradient(transparent, rgba(0,0,0,0.8));
+    padding: 20px 16px 12px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.75rem;
+    color: var(--accent);
+    text-align: center;
+    min-height: 40px;
+  }
+
+  /* LAYOUT: two column for register/login */
+  .two-col {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+    align-items: start;
+  }
+
+  @media (max-width: 700px) {
+    .two-col { grid-template-columns: 1fr; }
+    main { padding: 20px; }
+    header { padding: 16px 20px; }
+    .tabs { padding: 16px 20px 0; }
+  }
+
+  /* FORM */
+  .field { margin-bottom: 16px; }
+
+  label {
+    display: block;
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    margin-bottom: 8px;
+  }
+
+  input[type="text"], input[type="email"], select {
+    width: 100%;
+    padding: 12px 16px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    color: var(--text);
+    font-family: 'Syne', sans-serif;
+    font-size: 0.95rem;
+    outline: none;
+    transition: border-color 0.2s, box-shadow 0.2s;
+  }
+
+  input:focus, select:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(0,229,255,0.08);
+  }
+
+  /* BUTTONS */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 12px 24px;
+    border-radius: 10px;
+    font-family: 'Syne', sans-serif;
+    font-weight: 700;
+    font-size: 0.9rem;
+    letter-spacing: 0.03em;
+    cursor: pointer;
+    border: none;
+    transition: all 0.2s;
+    width: 100%;
+    margin-top: 8px;
+  }
+
+  .btn-primary {
+    background: linear-gradient(135deg, var(--accent) 0%, #0097b2 100%);
+    color: #000;
+  }
+  .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 6px 20px rgba(0,229,255,0.3); }
+
+  .btn-success {
+    background: linear-gradient(135deg, var(--success) 0%, #00a854 100%);
+    color: #000;
+  }
+  .btn-success:hover { transform: translateY(-1px); box-shadow: 0 6px 20px rgba(0,230,118,0.3); }
+
+  .btn-outline {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+  }
+  .btn-outline:hover { border-color: var(--accent); color: var(--accent); }
+
+  .btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    transform: none !important;
+    box-shadow: none !important;
+  }
+
+  /* PROGRESS BAR for face capture */
+  .capture-progress {
+    margin-top: 14px;
+    background: var(--surface2);
+    border-radius: 999px;
+    height: 6px;
+    overflow: hidden;
+  }
+
+  #capture-bar {
+    height: 100%;
+    width: 0%;
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
+    border-radius: 999px;
+    transition: width 0.3s;
+  }
+
+  #capture-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.72rem;
+    color: var(--text-dim);
+    margin-top: 8px;
+    text-align: center;
+  }
+
+  /* ATTENDANCE LOG TABLE */
+  .table-wrap {
+    overflow-x: auto;
+    border-radius: 12px;
+    border: 1px solid var(--border);
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.88rem;
+  }
+
+  thead th {
+    padding: 14px 16px;
+    text-align: left;
+    font-size: 0.68rem;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    border-bottom: 1px solid var(--border);
+    background: var(--surface2);
+  }
+
+  tbody tr {
+    border-bottom: 1px solid rgba(30,45,74,0.5);
+    transition: background 0.15s;
+  }
+
+  tbody tr:hover { background: rgba(0,229,255,0.03); }
+  tbody tr:last-child { border-bottom: none; }
+
+  td {
+    padding: 13px 16px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.82rem;
+  }
+
+  .badge {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 999px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  .badge-present { background: rgba(0,230,118,0.12); color: var(--success); border: 1px solid rgba(0,230,118,0.2); }
+  .badge-dept { background: rgba(0,229,255,0.08); color: var(--accent); border: 1px solid rgba(0,229,255,0.15); }
+
+  /* STAT CARDS */
+  .stats-row {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+    margin-bottom: 24px;
+  }
+
+  .stat-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 20px;
+    text-align: center;
+  }
+
+  .stat-num {
+    font-size: 2.2rem;
+    font-weight: 800;
+    color: var(--accent);
+    line-height: 1;
+    margin-bottom: 6px;
+  }
+
+  .stat-label {
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+  }
+
+  /* NOTIFICATION TOAST */
+  #toast {
+    position: fixed;
+    bottom: 30px;
+    right: 30px;
+    z-index: 1000;
+    padding: 14px 22px;
+    border-radius: 12px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.82rem;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    box-shadow: 0 8px 30px rgba(0,0,0,0.5);
+    transform: translateY(80px);
+    opacity: 0;
+    transition: all 0.35s cubic-bezier(.34,1.56,.64,1);
+    display: flex; align-items: center; gap: 10px;
+    max-width: 360px;
+  }
+
+  #toast.show { transform: translateY(0); opacity: 1; }
+  #toast.success { border-color: var(--success); color: var(--success); }
+  #toast.error { border-color: var(--danger); color: var(--danger); }
+  #toast.info { border-color: var(--accent); color: var(--accent); }
+
+  /* MODEL LOADING OVERLAY */
+  #loader-overlay {
+    position: fixed;
+    inset: 0;
+    background: var(--bg);
+    z-index: 999;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 24px;
+    transition: opacity 0.5s;
+  }
+
+  #loader-overlay.hidden { opacity: 0; pointer-events: none; }
+
+  .loader-logo {
+    font-size: 2rem;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    color: var(--accent);
+  }
+
+  .loader-sub {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.8rem;
+    color: var(--text-dim);
+  }
+
+  .spinner {
+    width: 48px; height: 48px;
+    border: 3px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  #loader-progress {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.75rem;
+    color: var(--text-dim);
+    text-align: center;
+    max-width: 300px;
+  }
+
+  /* FACE SCAN ANIMATION */
+  #face-scan-line {
+    position: absolute;
+    left: 0; right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, var(--accent), transparent);
+    top: 0;
+    animation: scan 2s ease-in-out infinite;
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  #face-scan-line.active { opacity: 1; }
+
+  @keyframes scan {
+    0% { top: 0%; }
+    50% { top: 95%; }
+    100% { top: 0%; }
+  }
+
+  .confidence-bar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 12px;
+    padding: 10px 14px;
+    background: var(--surface2);
+    border-radius: 8px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.75rem;
+    color: var(--text-dim);
+  }
+
+  #conf-fill {
+    flex: 1;
+    height: 4px;
+    background: var(--border);
+    border-radius: 999px;
+    overflow: hidden;
+  }
+
+  #conf-inner {
+    height: 100%;
+    width: 0%;
+    background: linear-gradient(90deg, var(--accent2), var(--accent));
+    border-radius: 999px;
+    transition: width 0.3s;
+  }
+
+  .empty-state {
+    text-align: center;
+    padding: 48px 20px;
+    color: var(--text-dim);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.85rem;
+  }
+
+  .empty-state span { font-size: 2.5rem; display: block; margin-bottom: 12px; }
+
+  #users-list { margin-top: 4px; }
+
+  .user-chip {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 14px;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    margin-bottom: 8px;
+    background: var(--surface2);
+    font-size: 0.85rem;
+  }
+
+  .user-chip-name { font-weight: 600; }
+  .user-chip-meta { font-family: 'JetBrains Mono', monospace; font-size: 0.72rem; color: var(--text-dim); }
+
+  .del-btn {
+    background: none;
+    border: none;
+    color: var(--text-dim);
+    cursor: pointer;
+    font-size: 1rem;
+    padding: 2px 6px;
+    border-radius: 6px;
+    transition: color 0.2s, background 0.2s;
+  }
+
+  .del-btn:hover { color: var(--danger); background: rgba(255,77,109,0.1); }
+
+  .section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+  }
+
+  .section-heading {
+    font-size: 1.2rem;
+    font-weight: 700;
+  }
+
+  #date-filter {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.78rem;
+    padding: 8px 12px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    outline: none;
+    cursor: pointer;
+  }
+</style>
+</head>
+<body>
+
+<!-- LOADER OVERLAY -->
+<div id="loader-overlay">
+  <div class="loader-logo">FaceAttend</div>
+  <div class="spinner"></div>
+  <div id="loader-progress">Initializing face recognition models…</div>
+  <div class="loader-sub">Powered by face-api.js + TensorFlow.js</div>
+</div>
+
+<div id="toast"></div>
+
+<header>
+  <div class="logo">
+    <div class="logo-icon">👁</div>
+    Face<span>Attend</span>
+  </div>
+  <div id="status-pill" class="loading">
+    <span class="dot"></span>
+    <span id="status-text">Loading models…</span>
+  </div>
+</header>
+
+<div class="tabs">
+  <button class="tab active" onclick="switchTab('register')">Register</button>
+  <button class="tab" onclick="switchTab('login')">Mark Attendance</button>
+  <button class="tab" onclick="switchTab('records')">Records</button>
+</div>
+
+<!-- ========== REGISTER PANEL ========== -->
+<main>
+<div id="panel-register" class="panel active">
+  <div class="two-col">
+    <div>
+      <div class="card">
+        <div class="card-title">Live Camera</div>
+        <div class="cam-wrap">
+          <video id="video" autoplay muted playsinline></video>
+          <canvas id="overlay"></canvas>
+          <div class="cam-corner tl"></div>
+          <div class="cam-corner tr"></div>
+          <div class="cam-corner bl"></div>
+          <div class="cam-corner br"></div>
+          <div id="face-scan-line"></div>
+          <div id="cam-msg">Position your face in frame</div>
+        </div>
+        <div class="capture-progress">
+          <div id="capture-bar"></div>
+        </div>
+        <div id="capture-label">0 / 15 face samples captured</div>
+      </div>
+    </div>
+
+    <div>
+      <div class="card">
+        <div class="card-title">Person Details</div>
+        <div class="field">
+          <label>Full Name</label>
+          <input type="text" id="reg-name" placeholder="e.g. Aarav Sharma" />
+        </div>
+        <div class="field">
+          <label>Employee / Student ID</label>
+          <input type="text" id="reg-id" placeholder="e.g. EMP-2024-001" />
+        </div>
+        <div class="field">
+          <label>Department / Class</label>
+          <input type="text" id="reg-dept" placeholder="e.g. Engineering" />
+        </div>
+        <div class="field">
+          <label>Email</label>
+          <input type="email" id="reg-email" placeholder="e.g. name@company.com" />
+        </div>
+        <button class="btn btn-primary" id="capture-btn" onclick="startCapture()" disabled>
+          📸 Capture Face Samples
+        </button>
+        <button class="btn btn-success" id="register-btn" onclick="registerPerson()" disabled style="margin-top:10px">
+          ✅ Register Person
+        </button>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Registered People</div>
+        <div id="users-list"><div class="empty-state"><span>👤</span>No one registered yet.</div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ========== LOGIN PANEL ========== -->
+<div id="panel-login" class="panel">
+  <div class="two-col">
+    <div>
+      <div class="card">
+        <div class="card-title">Face Scanner</div>
+        <div class="cam-wrap">
+          <video id="video2" autoplay muted playsinline></video>
+          <canvas id="overlay2"></canvas>
+          <div class="cam-corner tl"></div>
+          <div class="cam-corner tr"></div>
+          <div class="cam-corner bl"></div>
+          <div class="cam-corner br"></div>
+          <div id="face-scan-line2"></div>
+          <div id="cam-msg2">Looking for a registered face…</div>
+        </div>
+        <div class="confidence-bar">
+          <span>Match confidence</span>
+          <div id="conf-fill"><div id="conf-inner"></div></div>
+          <span id="conf-pct">–</span>
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <div class="card">
+        <div class="card-title">Recognition Result</div>
+        <div id="recognition-result">
+          <div class="empty-state">
+            <span>🔍</span>
+            Point your face at the camera.<br>Recognition is automatic.
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Controls</div>
+        <button class="btn btn-success" id="mark-btn" onclick="markAttendance()" disabled>
+          ✅ Mark as Present
+        </button>
+        <button class="btn btn-outline" onclick="resetLogin()" style="margin-top:10px">
+          🔄 Reset / Scan Again
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ========== RECORDS PANEL ========== -->
+<div id="panel-records" class="panel">
+  <div class="stats-row">
+    <div class="stat-card">
+      <div class="stat-num" id="stat-total">0</div>
+      <div class="stat-label">Registered</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-num" id="stat-today">0</div>
+      <div class="stat-label">Present Today</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-num" id="stat-all">0</div>
+      <div class="stat-label">All-time Entries</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="section-header">
+      <div class="section-heading">Attendance Log</div>
+      <div style="display:flex;gap:10px;align-items:center">
+        <input type="date" id="date-filter" onchange="renderRecords()" />
+        <button class="btn btn-outline" style="width:auto;padding:8px 14px;margin:0;font-size:0.78rem" onclick="exportCSV()">⬇ Export CSV</button>
+        <button class="btn btn-outline" style="width:auto;padding:8px 14px;margin:0;font-size:0.78rem;border-color:var(--danger);color:var(--danger)" onclick="clearAttendance()">🗑 Clear Log</button>
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Name</th>
+            <th>ID</th>
+            <th>Department</th>
+            <th>Date</th>
+            <th>Time</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody id="records-body">
+          <tr><td colspan="7"><div class="empty-state"><span>📋</span>No attendance records yet.</div></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+</main>
+
+<script>
+// =============================================
+// FACEATTEND — Main Application Logic
+// Uses face-api.js for ML face recognition
+// IndexedDB for persistent local storage
+// =============================================
+
+const MODEL_URL = 'https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js/weights';
+let modelsLoaded = false;
+let registeredPeople = []; // { id, name, dept, email, descriptors: Float32Array[] }
+let attendanceLog = [];
+let captureMode = false;
+let capturedDescriptors = [];
+const CAPTURE_TARGET = 15;
+let recognizedPerson = null;
+let loginInterval = null;
+let registerInterval = null;
+
+// ── DB ────────────────────────────────────────
+const DB_NAME = 'FaceAttend';
+const DB_VER = 1;
+let db;
+
+function openDB() {
+  return new Promise((res, rej) => {
+    const req = indexedDB.open(DB_NAME, DB_VER);
+    req.onupgradeneeded = e => {
+      const d = e.target.result;
+      if (!d.objectStoreNames.contains('people')) d.createObjectStore('people', { keyPath: 'uid' });
+      if (!d.objectStoreNames.contains('attendance')) {
+        const at = d.createObjectStore('attendance', { keyPath: 'entryId', autoIncrement: true });
+        at.createIndex('date', 'date');
+        at.createIndex('uid', 'uid');
+      }
+    };
+    req.onsuccess = e => { db = e.target.result; res(); };
+    req.onerror = () => rej(req.error);
+  });
+}
+
+async function dbGetAll(store) {
+  return new Promise((res, rej) => {
+    const tx = db.transaction(store, 'readonly');
+    const req = tx.objectStore(store).getAll();
+    req.onsuccess = () => res(req.result);
+    req.onerror = () => rej(req.error);
+  });
+}
+
+async function dbPut(store, obj) {
+  return new Promise((res, rej) => {
+    const tx = db.transaction(store, 'readwrite');
+    const req = tx.objectStore(store).put(obj);
+    req.onsuccess = () => res(req.result);
+    req.onerror = () => rej(req.error);
+  });
+}
+
+async function dbDelete(store, key) {
+  return new Promise((res, rej) => {
+    const tx = db.transaction(store, 'readwrite');
+    const req = tx.objectStore(store).delete(key);
+    req.onsuccess = () => res();
+    req.onerror = () => rej(req.error);
+  });
+}
+
+async function dbClearStore(store) {
+  return new Promise((res, rej) => {
+    const tx = db.transaction(store, 'readwrite');
+    const req = tx.objectStore(store).clear();
+    req.onsuccess = () => res();
+    req.onerror = () => rej(req.error);
+  });
+}
+
+// ── INIT ──────────────────────────────────────
+async function init() {
+  setStatus('loading', 'Loading models…');
+  try {
+    await openDB();
+    setLoader('Opening database…');
+
+    // Load face-api.js models
+    setLoader('Downloading SSD MobileNet…');
+    await faceapi.nets.ssdMobilenetv1.loadFromUri(MODEL_URL);
+    setLoader('Downloading Face Landmark model…');
+    await faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL);
+    setLoader('Downloading Face Recognition Net…');
+    await faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL);
+
+    modelsLoaded = true;
+    setStatus('ready', 'Models ready');
+
+    // Load stored data
+    const people = await dbGetAll('people');
+    people.forEach(p => {
+      // Restore Float32Arrays from stored plain arrays
+      p.descriptors = p.descriptors.map(d => new Float32Array(d));
+      registeredPeople.push(p);
+    });
+    attendanceLog = await dbGetAll('attendance');
+
+    renderUsersList();
+    renderRecords();
+    updateStats();
+
+    // Hide loader
+    document.getElementById('loader-overlay').classList.add('hidden');
+
+    // Start webcam for register tab
+    await startCamera('video');
+    startRegisterLoop();
+
+  } catch (e) {
+    setStatus('error', 'Error loading models');
+    setLoader('⚠️ Failed: ' + e.message);
+    console.error(e);
+  }
+}
+
+// ── CAMERA ────────────────────────────────────
+async function startCamera(videoId) {
+  const v = document.getElementById(videoId);
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 } });
+    v.srcObject = stream;
+    return new Promise(res => { v.onloadedmetadata = () => res(); });
+  } catch (e) {
+    toast('Camera access denied. Please allow camera permissions.', 'error');
+  }
+}
+
+function getCanvas(videoId, overlayId) {
+  const v = document.getElementById(videoId);
+  const c = document.getElementById(overlayId);
+  c.width = v.videoWidth || 640;
+  c.height = v.videoHeight || 480;
+  return { video: v, canvas: c };
+}
+
+// ── REGISTER LOOP ─────────────────────────────
+function startRegisterLoop() {
+  if (registerInterval) clearInterval(registerInterval);
+  registerInterval = setInterval(async () => {
+    if (!modelsLoaded) return;
+    const { video, canvas } = getCanvas('video', 'overlay');
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    const detection = await faceapi.detectSingleFace(video, new faceapi.SsdMobilenetv1Options({ minConfidence: 0.5 }))
+      .withFaceLandmarks().withFaceDescriptor().catch(() => null);
+
+    if (detection) {
+      // Draw box
+      const box = detection.detection.box;
+      ctx.strokeStyle = '#00e5ff';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(box.x, box.y, box.width, box.height);
+
+      // Draw landmarks
+      ctx.fillStyle = 'rgba(0,229,255,0.6)';
+      detection.landmarks.positions.forEach(pt => {
+        ctx.beginPath();
+        ctx.arc(pt.x, pt.y, 2, 0, Math.PI * 2);
+        ctx.fill();
+      });
+
+      document.getElementById('face-scan-line').classList.add('active');
+      document.getElementById('capture-btn').disabled = false;
+      document.getElementById('cam-msg').textContent = '✓ Face detected — ready to capture';
+
+      // Auto-capture when in capture mode
+      if (captureMode && capturedDescriptors.length < CAPTURE_TARGET) {
+        capturedDescriptors.push(detection.descriptor);
+        const pct = Math.round((capturedDescriptors.length / CAPTURE_TARGET) * 100);
+        document.getElementById('capture-bar').style.width = pct + '%';
+        document.getElementById('capture-label').textContent =
+          `${capturedDescriptors.length} / ${CAPTURE_TARGET} face samples captured`;
+
+        if (capturedDescriptors.length >= CAPTURE_TARGET) {
+          captureMode = false;
+          document.getElementById('register-btn').disabled = false;
+          document.getElementById('capture-btn').textContent = '✅ Capture complete!';
+          document.getElementById('cam-msg').textContent = 'Samples ready — click Register';
+          toast('Face samples captured! Fill in details and register.', 'info');
+        }
+      }
+    } else {
+      document.getElementById('face-scan-line').classList.remove('active');
+      document.getElementById('capture-btn').disabled = true;
+      document.getElementById('cam-msg').textContent = 'Position your face in frame';
+    }
+  }, 200);
+}
+
+function startCapture() {
+  const name = document.getElementById('reg-name').value.trim();
+  const id = document.getElementById('reg-id').value.trim();
+  if (!name || !id) { toast('Please enter Name and ID first.', 'error'); return; }
+
+  capturedDescriptors = [];
+  captureMode = true;
+  document.getElementById('capture-bar').style.width = '0%';
+  document.getElementById('capture-label').textContent = '0 / ' + CAPTURE_TARGET + ' face samples captured';
+  document.getElementById('capture-btn').textContent = '📸 Capturing…';
+  document.getElementById('register-btn').disabled = true;
+  toast('Capturing face samples… stay still and look at the camera.', 'info');
+}
+
+async function registerPerson() {
+  const name = document.getElementById('reg-name').value.trim();
+  const uid = document.getElementById('reg-id').value.trim();
+  const dept = document.getElementById('reg-dept').value.trim();
+  const email = document.getElementById('reg-email').value.trim();
+
+  if (!name || !uid) { toast('Name and ID are required.', 'error'); return; }
+  if (capturedDescriptors.length < CAPTURE_TARGET) { toast('Please capture face samples first.', 'error'); return; }
+  if (registeredPeople.find(p => p.uid === uid)) { toast('ID already registered!', 'error'); return; }
+
+  const person = {
+    uid, name, dept, email,
+    registeredAt: new Date().toISOString(),
+    descriptors: capturedDescriptors.map(d => Array.from(d)) // store as plain array
+  };
+
+  await dbPut('people', person);
+
+  // Keep Float32Array versions in memory
+  const memPerson = { ...person, descriptors: capturedDescriptors.slice() };
+  registeredPeople.push(memPerson);
+
+  // Reset form
+  ['reg-name','reg-id','reg-dept','reg-email'].forEach(id => document.getElementById(id).value = '');
+  capturedDescriptors = [];
+  captureMode = false;
+  document.getElementById('capture-bar').style.width = '0%';
+  document.getElementById('capture-label').textContent = '0 / ' + CAPTURE_TARGET + ' face samples captured';
+  document.getElementById('capture-btn').textContent = '📸 Capture Face Samples';
+  document.getElementById('capture-btn').disabled = true;
+  document.getElementById('register-btn').disabled = true;
+
+  renderUsersList();
+  updateStats();
+  toast(`${name} registered successfully!`, 'success');
+}
+
+// ── LOGIN / RECOGNITION LOOP ───────────────────
+let loginCamStarted = false;
+
+async function startLoginPanel() {
+  if (!loginCamStarted) {
+    await startCamera('video2');
+    loginCamStarted = true;
+  }
+  startLoginLoop();
+}
+
+function startLoginLoop() {
+  if (loginInterval) clearInterval(loginInterval);
+  recognizedPerson = null;
+  updateRecognitionResult(null);
+
+  loginInterval = setInterval(async () => {
+    if (!modelsLoaded || registeredPeople.length === 0) {
+      document.getElementById('cam-msg2').textContent =
+        registeredPeople.length === 0 ? 'No registered faces yet' : 'Loading…';
+      return;
+    }
+
+    const { video, canvas } = getCanvas('video2', 'overlay2');
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    const detection = await faceapi.detectSingleFace(video, new faceapi.SsdMobilenetv1Options({ minConfidence: 0.5 }))
+      .withFaceLandmarks().withFaceDescriptor().catch(() => null);
+
+    if (!detection) {
+      document.getElementById('face-scan-line2').classList.remove('active');
+      document.getElementById('cam-msg2').textContent = 'Looking for a face…';
+      document.getElementById('conf-inner').style.width = '0%';
+      document.getElementById('conf-pct').textContent = '–';
+      return;
+    }
+
+    document.getElementById('face-scan-line2').classList.add('active');
+
+    // Build label matcher from all registered people
+    const labeledDescriptors = registeredPeople.map(p =>
+      new faceapi.LabeledFaceDescriptors(p.uid, p.descriptors)
+    );
+    const matcher = new faceapi.FaceMatcher(labeledDescriptors, 0.55); // 0.55 = strict threshold
+    const match = matcher.findBestMatch(detection.descriptor);
+
+    const box = detection.detection.box;
+
+    if (match.label !== 'unknown') {
+      const person = registeredPeople.find(p => p.uid === match.label);
+      const distance = match.distance;
+      const confidence = Math.round((1 - distance) * 100);
+
+      // Draw green box
+      ctx.strokeStyle = '#00e676';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(box.x, box.y, box.width, box.height);
+      ctx.fillStyle = 'rgba(0,230,118,0.15)';
+      ctx.fillRect(box.x, box.y, box.width, box.height);
+
+      // Name label
+      ctx.fillStyle = '#00e676';
+      ctx.font = 'bold 14px Syne';
+      ctx.fillText(person.name, box.x, box.y - 8);
+
+      document.getElementById('cam-msg2').textContent = `✓ ${person.name} recognized`;
+      document.getElementById('conf-inner').style.width = confidence + '%';
+      document.getElementById('conf-pct').textContent = confidence + '%';
+
+      recognizedPerson = { ...person, confidence };
+      updateRecognitionResult(recognizedPerson);
+      document.getElementById('mark-btn').disabled = false;
+    } else {
+      // Draw red box
+      ctx.strokeStyle = '#ff4d6d';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(box.x, box.y, box.width, box.height);
+      ctx.fillStyle = 'rgba(255,77,109,0.1)';
+      ctx.fillRect(box.x, box.y, box.width, box.height);
+      ctx.fillStyle = '#ff4d6d';
+      ctx.font = 'bold 13px Syne';
+      ctx.fillText('Unknown', box.x, box.y - 8);
+
+      document.getElementById('cam-msg2').textContent = 'Face not recognized';
+      document.getElementById('conf-inner').style.width = '0%';
+      document.getElementById('conf-pct').textContent = '0%';
+      recognizedPerson = null;
+      updateRecognitionResult(null, 'unknown');
+      document.getElementById('mark-btn').disabled = true;
+    }
+  }, 350);
+}
+
+function updateRecognitionResult(person, state) {
+  const el = document.getElementById('recognition-result');
+  if (!person && state !== 'unknown') {
+    el.innerHTML = `<div class="empty-state"><span>🔍</span>Point your face at the camera.<br>Recognition is automatic.</div>`;
+    return;
+  }
+  if (state === 'unknown') {
+    el.innerHTML = `<div class="empty-state" style="color:var(--danger)"><span>❓</span>Face not recognized.<br>Please register first.</div>`;
+    return;
+  }
+  const alreadyMarked = hasMarkedToday(person.uid);
+  el.innerHTML = `
+    <div style="text-align:center;padding:16px 0">
+      <div style="font-size:3rem;margin-bottom:12px">👤</div>
+      <div style="font-size:1.4rem;font-weight:800;margin-bottom:6px">${person.name}</div>
+      <div style="font-family:'JetBrains Mono',monospace;font-size:0.8rem;color:var(--text-dim);margin-bottom:4px">${person.uid}</div>
+      <div style="margin-bottom:12px"><span class="badge badge-dept">${person.dept || 'No dept'}</span></div>
+      <div style="font-family:'JetBrains Mono',monospace;font-size:0.78rem;color:var(--accent)">Match confidence: ${person.confidence}%</div>
+      ${alreadyMarked ? `<div style="margin-top:12px;padding:8px 16px;background:rgba(0,230,118,0.1);border-radius:8px;font-size:0.8rem;color:var(--success)">✅ Already marked present today</div>` : ''}
+    </div>
+  `;
+}
+
+function hasMarkedToday(uid) {
+  const today = todayStr();
+  return attendanceLog.some(e => e.uid === uid && e.date === today);
+}
+
+async function markAttendance() {
+  if (!recognizedPerson) { toast('No recognized person.', 'error'); return; }
+  if (hasMarkedToday(recognizedPerson.uid)) {
+    toast(`${recognizedPerson.name} is already marked for today.`, 'error');
+    return;
+  }
+
+  const now = new Date();
+  const entry = {
+    uid: recognizedPerson.uid,
+    name: recognizedPerson.name,
+    dept: recognizedPerson.dept || '',
+    date: todayStr(),
+    time: now.toTimeString().slice(0, 8),
+    status: 'Present',
+    confidence: recognizedPerson.confidence,
+    timestamp: now.toISOString()
+  };
+
+  const id = await dbPut('attendance', entry);
+  entry.entryId = id;
+  attendanceLog.push(entry);
+
+  updateRecognitionResult(recognizedPerson);
+  updateStats();
+  toast(`✅ ${recognizedPerson.name} marked Present!`, 'success');
+  document.getElementById('mark-btn').disabled = true;
+}
+
+function resetLogin() {
+  recognizedPerson = null;
+  document.getElementById('mark-btn').disabled = true;
+  document.getElementById('conf-inner').style.width = '0%';
+  document.getElementById('conf-pct').textContent = '–';
+  updateRecognitionResult(null);
+  toast('Scanner reset.', 'info');
+}
+
+// ── RECORDS ────────────────────────────────────
+function renderRecords() {
+  const filter = document.getElementById('date-filter').value;
+  const body = document.getElementById('records-body');
+  let data = [...attendanceLog].sort((a,b) => b.timestamp?.localeCompare(a.timestamp));
+  if (filter) data = data.filter(e => e.date === filter);
+
+  if (!data.length) {
+    body.innerHTML = `<tr><td colspan="7"><div class="empty-state"><span>📋</span>No records${filter ? ' for this date' : ''}.</div></td></tr>`;
+    return;
+  }
+
+  body.innerHTML = data.map((e, i) => `
+    <tr>
+      <td>${i + 1}</td>
+      <td><strong>${e.name}</strong></td>
+      <td>${e.uid}</td>
+      <td><span class="badge badge-dept">${e.dept || '–'}</span></td>
+      <td>${e.date}</td>
+      <td>${e.time}</td>
+      <td><span class="badge badge-present">${e.status}</span></td>
+    </tr>
+  `).join('');
+}
+
+function renderUsersList() {
+  const el = document.getElementById('users-list');
+  if (!registeredPeople.length) {
+    el.innerHTML = `<div class="empty-state"><span>👤</span>No one registered yet.</div>`;
+    return;
+  }
+  el.innerHTML = registeredPeople.map(p => `
+    <div class="user-chip">
+      <div>
+        <div class="user-chip-name">${p.name}</div>
+        <div class="user-chip-meta">${p.uid} · ${p.dept || 'No dept'}</div>
+      </div>
+      <button class="del-btn" onclick="deletePerson('${p.uid}')" title="Remove">✕</button>
+    </div>
+  `).join('');
+}
+
+async function deletePerson(uid) {
+  if (!confirm('Remove this person and all their attendance records?')) return;
+  await dbDelete('people', uid);
+  registeredPeople = registeredPeople.filter(p => p.uid !== uid);
+
+  // Remove attendance entries
+  const toDelete = attendanceLog.filter(e => e.uid === uid);
+  for (const e of toDelete) await dbDelete('attendance', e.entryId);
+  attendanceLog = attendanceLog.filter(e => e.uid !== uid);
+
+  renderUsersList();
+  renderRecords();
+  updateStats();
+  toast('Person removed.', 'info');
+}
+
+function updateStats() {
+  document.getElementById('stat-total').textContent = registeredPeople.length;
+  const today = todayStr();
+  const todayEntries = new Set(attendanceLog.filter(e => e.date === today).map(e => e.uid));
+  document.getElementById('stat-today').textContent = todayEntries.size;
+  document.getElementById('stat-all').textContent = attendanceLog.length;
+}
+
+async function clearAttendance() {
+  if (!confirm('Clear ALL attendance records? This cannot be undone.')) return;
+  await dbClearStore('attendance');
+  attendanceLog = [];
+  renderRecords();
+  updateStats();
+  toast('Attendance log cleared.', 'info');
+}
+
+function exportCSV() {
+  const filter = document.getElementById('date-filter').value;
+  let data = filter ? attendanceLog.filter(e => e.date === filter) : attendanceLog;
+  if (!data.length) { toast('No records to export.', 'error'); return; }
+
+  const header = ['Name','ID','Department','Date','Time','Status','Confidence'];
+  const rows = data.map(e => [e.name, e.uid, e.dept, e.date, e.time, e.status, e.confidence + '%']);
+  const csv = [header, ...rows].map(r => r.map(c => `"${c}"`).join(',')).join('\n');
+
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `attendance_${filter || 'all'}.csv`;
+  a.click();
+}
+
+// ── TABS ─────────────────────────────────────
+function switchTab(name) {
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('panel-' + name).classList.add('active');
+  event.target.classList.add('active');
+
+  if (name === 'login') startLoginPanel();
+  if (name === 'records') { renderRecords(); updateStats(); }
+}
+
+// ── UTILS ─────────────────────────────────────
+function todayStr() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function toast(msg, type = 'info') {
+  const el = document.getElementById('toast');
+  const icons = { success: '✅', error: '❌', info: 'ℹ️' };
+  el.textContent = icons[type] + ' ' + msg;
+  el.className = 'show ' + type;
+  clearTimeout(el._t);
+  el._t = setTimeout(() => el.classList.remove('show'), 3500);
+}
+
+function setStatus(state, text) {
+  const pill = document.getElementById('status-pill');
+  pill.className = state;
+  document.getElementById('status-text').textContent = text;
+}
+
+function setLoader(text) {
+  document.getElementById('loader-progress').textContent = text;
+}
+
+// Set today's date in filter
+document.getElementById('date-filter').value = todayStr();
+
+// ── BOOT ─────────────────────────────────────
+// Wait for full page load so face-api.js script is executed
+window.addEventListener('load', () => {
+  if (typeof faceapi === 'undefined') {
+    setStatus('error', 'face-api.js failed to load');
+    setLoader('❌ Could not load face-api.js. Check your internet connection and reload.');
+    document.getElementById('loader-progress').style.color = '#ff4d6d';
+    return;
+  }
+  init();
+});
+</script>
+</body>
+</html>
